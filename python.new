@@ -1,2 +1,46 @@
-Muokattu
-uusi rivi
+import os
+import pandas as pd
+import openai
+import argparse
+
+# Load and prepare historical data
+def load_data(path):
+    df = pd.read_csv(path, parse_dates=['date'])
+    df.sort_values('date', inplace=True)
+    return df
+
+# Forecast future cash flows via OpenAI API
+def forecast_cashflow(amounts, months):
+    openai.api_key = os.getenv("OPENAI_API_KEY")
+    prompt = (
+        f"Given the historical monthly cash flows: {amounts}, "
+        f"forecast the next {months} months of cash flow. Provide a list of forecasted values."
+    )
+    response = openai.ChatCompletion.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.5
+    )
+    content = response.choices[0].message.content.strip()
+    # Parse comma-separated list
+    forecasts = [float(x) for x in content.strip('[]').split(',')]
+    return forecasts
+
+# Main CLI entry point
+def main():
+    parser = argparse.ArgumentParser(description="Cash Flow Forecasting")
+    parser.add_argument("--input", type=str, required=True, help="CSV with columns date,amount")
+    parser.add_argument("--months", type=int, default=6, help="Months to forecast")
+    args = parser.parse_args()
+
+    df = load_data(args.input)
+    amounts = df['amount'].tolist()
+    forecasts = forecast_cashflow(amounts, args.months)
+
+    last_date = df['date'].max()
+    future_dates = pd.date_range(start=last_date + pd.DateOffset(months=1), periods=args.months, freq='MS')
+    forecast_df = pd.DataFrame({"date": future_dates, "forecast": forecasts})
+    print(forecast_df)
+
+if __name__ == "__main__":
+    main()
